@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Rounded squircle badge inside 66dp safe zone (21..87) -->
+    <path
+        android:pathData="M35,26 L73,26 A16,16 0,0,1 89,42 L89,66 A16,16 0,0,1 73,82 L35,82 A16,16 0,0,1 19,66 L19,42 A16,16 0,0,1 35,26 Z"
+        android:fillColor="#1F1A3A"
+        android:strokeColor="#7C4DFF"
+        android:strokeWidth="2.5" />
+
+    <!-- Infinity Symbol (∞) -->
+    <path
+        android:pathData="M 40,46 C 34,46 30,50 30,54 C 30,58 34,62 40,62 C 48,62 60,46 68,46 C 74,46 78,50 78,54 C 78,58 74,62 68,62 C 60,62 48,46 40,46 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Subtle inner neon dot accents -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M 40,54 m -2,0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0" />
+    <path
+        android:fillColor="#FF4081"
+        android:pathData="M 68,54 m -2,0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0" />
+</vector>

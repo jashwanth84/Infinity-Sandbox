@@ -1,0 +1,6 @@
+{
+  "name": "Infinity Sandbox",
+  "description": "Multi-agent AI native Android coding sandbox with parallel specialist agents, live streaming, and full project export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
