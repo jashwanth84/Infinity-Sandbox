@@ -1,0 +1,248 @@
+name: Build and Release Android APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build variant to produce'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - 'release'
+          - 'debug'
+          - 'both'
+      create_github_release:
+        description: 'Publish a GitHub Release with build assets'
+        required: true
+        type: boolean
+        default: true
+      custom_tag:
+        description: 'Custom tag for release (optional, e.g. v1.0.0)'
+        required: false
+        type: string
+        default: ''
+      release_notes:
+        description: 'Custom release notes (optional)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build-and-release:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x ./gradlew || true
+
+      - name: Prepare environment configuration
+        env:
+          GEMINI_API_KEY_SECRET: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_SERVICES_JSON_SECRET: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          NV_KEY1_SECRET: ${{ secrets.NV_KEY1 }}
+          NV_KEY2_SECRET: ${{ secrets.NV_KEY2 }}
+          NV_KEY3_SECRET: ${{ secrets.NV_KEY3 }}
+          NV_KEY4_SECRET: ${{ secrets.NV_KEY4 }}
+          NV_KEY5_SECRET: ${{ secrets.NV_KEY5 }}
+        run: |
+          echo "Setting up .env file..."
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              cp .env.example .env
+            else
+              touch .env
+            fi
+          fi
+          if [ -n "$GEMINI_API_KEY_SECRET" ]; then
+            echo "GEMINI_API_KEY=\"$GEMINI_API_KEY_SECRET\"" >> .env
+          fi
+          if [ -n "$NV_KEY1_SECRET" ]; then
+            echo "NV_KEY1=\"$NV_KEY1_SECRET\"" >> .env
+          fi
+          if [ -n "$NV_KEY2_SECRET" ]; then
+            echo "NV_KEY2=\"$NV_KEY2_SECRET\"" >> .env
+          fi
+          if [ -n "$NV_KEY3_SECRET" ]; then
+            echo "NV_KEY3=\"$NV_KEY3_SECRET\"" >> .env
+          fi
+          if [ -n "$NV_KEY4_SECRET" ]; then
+            echo "NV_KEY4=\"$NV_KEY4_SECRET\"" >> .env
+          fi
+          if [ -n "$NV_KEY5_SECRET" ]; then
+            echo "NV_KEY5=\"$NV_KEY5_SECRET\"" >> .env
+          fi
+
+          if [ -n "$GOOGLE_SERVICES_JSON_SECRET" ]; then
+            echo "Restoring google-services.json from GitHub Secrets..."
+            echo "$GOOGLE_SERVICES_JSON_SECRET" > app/google-services.json
+          fi
+
+      - name: Setup Signing Keystore
+        env:
+          KEYSTORE_BASE64_SECRET: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASS_SECRET: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASS_SECRET: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # 1. Restore debug.keystore if available
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            echo "Restoring debug.keystore from base64..."
+            base64 --decode debug.keystore.base64 > debug.keystore || true
+          fi
+
+          # 2. Configure release keystore
+          if [ -n "$KEYSTORE_BASE64_SECRET" ]; then
+            echo "Using custom release keystore from KEYSTORE_BASE64 secret..."
+            echo "$KEYSTORE_BASE64_SECRET" | base64 --decode > my-upload-key.jks
+            echo "STORE_PASSWORD=${STORE_PASS_SECRET:-android}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${KEY_PASS_SECRET:-android}" >> $GITHUB_ENV
+          elif [ -n "$STORE_PASS_SECRET" ] && [ -f "my-upload-key.jks" ]; then
+            echo "Using existing my-upload-key.jks with provided secrets..."
+            echo "STORE_PASSWORD=$STORE_PASS_SECRET" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${KEY_PASS_SECRET:-$STORE_PASS_SECRET}" >> $GITHUB_ENV
+          else
+            echo "No custom release keystore configured. Generating release signing keystore..."
+            keytool -genkeypair -v \
+              -keystore my-upload-key.jks \
+              -alias upload \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=InfinitySandbox, OU=Release, O=InfinitySandbox, L=Unknown, ST=Unknown, C=US"
+            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+          fi
+
+      - name: Determine Build Tasks
+        id: tasks
+        run: |
+          BUILD_TYPE="${{ github.event.inputs.build_type }}"
+          if [ -z "$BUILD_TYPE" ]; then
+            BUILD_TYPE="release"
+          fi
+          echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
+
+          case "$BUILD_TYPE" in
+            "debug")
+              echo "gradle_tasks=:app:assembleDebug" >> $GITHUB_OUTPUT
+              ;;
+            "both")
+              echo "gradle_tasks=:app:assembleRelease :app:bundleRelease :app:assembleDebug" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "gradle_tasks=:app:assembleRelease :app:bundleRelease" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Build with Gradle
+        run: ./gradlew ${{ steps.tasks.outputs.gradle_tasks }} --stacktrace
+
+      - name: Collect and Package Artifacts
+        id: package
+        run: |
+          mkdir -p release-artifacts
+
+          # Extract version from build file or default
+          VERSION_NAME=$(grep 'versionName = ' app/build.gradle.kts | head -n 1 | sed 's/.*versionName = "\(.*\)".*/\1/' || echo "1.0")
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME="1.0"
+          fi
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+          # Copy Release APK
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "release-artifacts/InfinitySandbox-v${VERSION_NAME}-release.apk"
+          fi
+
+          # Copy Release AAB (Android App Bundle for Play Store)
+          if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+            cp app/build/outputs/bundle/release/app-release.aab "release-artifacts/InfinitySandbox-v${VERSION_NAME}-release.aab"
+          fi
+
+          # Copy Debug APK if generated
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk "release-artifacts/InfinitySandbox-v${VERSION_NAME}-debug.apk"
+          fi
+
+          # Generate SHA-256 Checksums
+          cd release-artifacts
+          sha256sum * > SHA256SUMS.txt || true
+          cd ..
+
+          echo "Generated artifacts:"
+          ls -lh release-artifacts/
+
+      - name: Upload Artifacts to Workflow Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: infinity-sandbox-build-artifacts
+          path: release-artifacts/*
+          retention-days: 90
+
+      - name: Create or Update GitHub Release
+        if: |
+          startsWith(github.ref, 'refs/tags/v') ||
+          github.ref == 'refs/heads/main' ||
+          github.ref == 'refs/heads/master' ||
+          github.event.inputs.create_github_release == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.package.outputs.version_name }}"
+          CUSTOM_TAG="${{ github.event.inputs.custom_tag }}"
+          CUSTOM_NOTES="${{ github.event.inputs.release_notes }}"
+
+          # Determine the tag name
+          if [ -n "$CUSTOM_TAG" ]; then
+            TAG_NAME="$CUSTOM_TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            TAG_NAME="v${VERSION}-build-${GITHUB_RUN_NUMBER}"
+          fi
+
+          TITLE="Infinity Sandbox $TAG_NAME"
+
+          echo "Publishing GitHub Release for tag: $TAG_NAME"
+
+          # Check if release already exists
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, uploading/updating assets..."
+            gh release upload "$TAG_NAME" release-artifacts/* --clobber
+          else
+            echo "Creating new release $TAG_NAME..."
+            if [ -n "$CUSTOM_NOTES" ]; then
+              gh release create "$TAG_NAME" release-artifacts/* \
+                --title "$TITLE" \
+                --notes "$CUSTOM_NOTES"
+            else
+              gh release create "$TAG_NAME" release-artifacts/* \
+                --title "$TITLE" \
+                --generate-notes
+            fi
+          fi
