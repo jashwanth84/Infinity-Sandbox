@@ -57,7 +57,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Grant execute permission to Gradle wrapper
-        run: chmod +x ./gradlew || true
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+          fi
 
       - name: Prepare environment configuration
         env:
@@ -160,7 +163,12 @@ jobs:
           esac
 
       - name: Build with Gradle
-        run: ./gradlew ${{ steps.tasks.outputs.gradle_tasks }} --stacktrace
+        run: |
+          if [ -f "./gradlew" ]; then
+            ./gradlew ${{ steps.tasks.outputs.gradle_tasks }} --stacktrace
+          else
+            gradle ${{ steps.tasks.outputs.gradle_tasks }} --stacktrace
+          fi
 
       - name: Collect and Package Artifacts
         id: package

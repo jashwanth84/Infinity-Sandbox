@@ -212,4 +212,69 @@ class NvidiaApiClient {
 
         return accumulatedContent.toString()
     }
+
+    // --- Role-Specific Agent Request Methods ---
+
+    suspend fun sendOrchestratorRequest(
+        userPrompt: String,
+        existingFilesSummary: String = "",
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.ORCHESTRATOR)
+        val fullPrompt = if (existingFilesSummary.isNotBlank()) {
+            "User Goal: $userPrompt\nExisting Files:\n$existingFilesSummary\nPlan modifications and subtasks."
+        } else {
+            "User Goal: $userPrompt\nPlan the project subtasks."
+        }
+        return streamChatCompletion(config, com.example.domain.Prompts.ORCHESTRATOR, fullPrompt, onChunk = onChunk)
+    }
+
+    suspend fun sendResearcherRequest(
+        goal: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.RESEARCHER)
+        return streamChatCompletion(config, com.example.domain.Prompts.RESEARCHER, goal, onChunk = onChunk)
+    }
+
+    suspend fun sendCoderRequest(
+        prompt: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.CODER)
+        return streamChatCompletion(config, com.example.domain.Prompts.CODER, prompt, onChunk = onChunk)
+    }
+
+    suspend fun sendVisionRequest(
+        prompt: String,
+        base64Image: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.VISION)
+        return streamChatCompletion(config, com.example.domain.Prompts.VISION, prompt, base64Image = base64Image, onChunk = onChunk)
+    }
+
+    suspend fun sendDebuggerRequest(
+        codeFilesSummary: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.DEBUGGER)
+        return streamChatCompletion(config, com.example.domain.Prompts.DEBUGGER, "Review these files:\n$codeFilesSummary", onChunk = onChunk)
+    }
+
+    suspend fun sendHelperRequest(
+        codeFilesSummary: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.HELPER)
+        return streamChatCompletion(config, com.example.domain.Prompts.HELPER, "Generate tests and README for:\n$codeFilesSummary", onChunk = onChunk)
+    }
+
+    suspend fun sendMergerRequest(
+        allFilesSummary: String,
+        onChunk: (AgentStreamChunk) -> Unit = {}
+    ): String {
+        val config = com.example.domain.AgentConfig.forAgent(com.example.domain.AgentType.MERGER)
+        return streamChatCompletion(config, com.example.domain.Prompts.MERGER, "Merge all files into a complete Android project:\n$allFilesSummary", onChunk = onChunk)
+    }
 }

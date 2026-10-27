@@ -54,3 +54,30 @@
 
 4. **Run:**
    Select an Android Emulator or connected device running Android 8.0+ (API 26+) and press **Run 'app'**.
+
+---
+
+## GitHub Actions Automated APK/AAB Release
+
+The project includes `.github/workflows/release.yml` for automated CI/CD:
+
+### Automatic Trigger
+- Push commits to `main` or `master`.
+- Push any tag starting with `v` (e.g., `git tag v1.0.0 && git push origin v1.0.0`).
+
+### Manual Trigger (Workflow Dispatch)
+1. Go to your GitHub repository's **Actions** tab.
+2. Select **Build and Release Android APK**.
+3. Click **Run workflow**, choose:
+   - **Build variant**: `release`, `debug`, or `both`.
+   - **Publish GitHub Release**: `true` or `false`.
+   - **Custom tag**: (e.g. `v1.0.0`).
+   - **Release notes**: optional changelog text.
+4. Download the generated APK, AAB, and SHA-256 checksums from the **Releases** page or workflow artifacts.
+
+### Optional GitHub Repository Secrets
+Under **Settings > Secrets and variables > Actions**:
+- `KEYSTORE_BASE64`: Base64 encoded release keystore (optional, auto-generated if omitted).
+- `STORE_PASSWORD` & `KEY_PASSWORD`: Keystore credentials.
+- `NV_KEY1` .. `NV_KEY5`: NVIDIA API Keys.
+- `GEMINI_API_KEY`: Gemini API key for video generation and copilot features.
